@@ -17,3 +17,12 @@ type IntentDecomposeResponse struct {
 	Response    string	`json:"response"`
 	Intent		any	`json:"intent,omitempty"`
 }
+
+type OutboxEventRequest struct {
+	EventType     string          `json:"event_type"`
+}
+
+type OutBoxEventResponse struct {
+	Response    string          `json:"response"`
+	Event       any             `json:"event,omitempty"`
+}

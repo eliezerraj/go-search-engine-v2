@@ -1,5 +1,10 @@
 package entity
 
+import (
+	"encoding/json"
+	"time"
+)
+
 type VectorSearch struct {
 	Text string `json:"text,omitempty"`
     Embedding []float64 `json:"embedding,omitempty"`
@@ -24,4 +29,16 @@ type TeiModel struct {
     Truncate bool `json:"truncate,omitempty"`
     TruncationDirection string `json:"truncation_direction,omitempty"`
     Embedding []float64 `json:"embedding,omitempty"`
+}
+
+type OutboxEvent struct {
+	ID            int64           `json:"id"`
+	AggregateType string          `json:"aggregate_type"`
+	AggregateID   string          `json:"aggregate_id"`
+	EventType     string          `json:"event_type"`
+	Payload       json.RawMessage `json:"payload"`
+	CreatedAt     time.Time       `json:"created_at"`
+	PublishedAt   *time.Time      `json:"published_at,omitempty"`
+	Attempts      int32           `json:"attempts"`
+	LastError     *string         `json:"last_error,omitempty"`
 }

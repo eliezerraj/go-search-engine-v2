@@ -15,8 +15,7 @@ import (
 	"github.com/go-semantic-engine-v2/application/config"
 
 	"github.com/eliezerraj/go-core/v3/logger"
-	"github.com/eliezerraj/go-core/v3/observability/tracing"
-	
+	tracing "github.com/eliezerraj/go-core/v3/observability/tracing"
 	coreMetricLib "github.com/eliezerraj/go-core/v3/observability/metric"
 
 	"go.opentelemetry.io/otel"
@@ -30,10 +29,12 @@ func setupLogging(cfg *config.Config) {
 		cfg.Log.Level,
 		cfg.Log.Mode,
 	).WithHook(func(ctx context.Context) []zap.Field {
+		zapFields := []zap.Field{}
+		zapFields = append(zapFields, zap.String("app_name", cfg.App.Name))
 		if id, ok := ctx.Value(RequestIDHeaderName).(string); ok && id != "" {
-			return []zap.Field{zap.String("x-request-id", id)}
+			zapFields = append(zapFields, zap.String("x-request-id", id))
 		}
-		return nil
+		return zapFields
 	})
 }
 
@@ -53,7 +54,6 @@ func setupObservability(cfg *config.Config){
 
 	otelEnvTrace := &tracing.EnvTrace{
 		OtelExportEndpoint:      cfg.OtelEnv.OtelExportEndpoint,
-		UseOtlpCollector:        cfg.OtelEnv.UseOtlpCollector,
 		TimeInterval:            1,
 		TimeAliveIncrementer:    1,
 		TotalHeapSizeUpperBound: 100,
@@ -61,7 +61,7 @@ func setupObservability(cfg *config.Config){
 		CpuUsageUpperBound:      100,
 		SampleAppPorts:          []string{},
 		AWSCloudWatchLogGroup:   []string{},
-	} 
+	}
 	
 	tracerProvider = tracing.NewTracerProvider(
 		context.Background(),

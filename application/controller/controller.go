@@ -10,7 +10,7 @@ import (
 	"github.com/go-semantic-engine-v2/application/domain/usecase"
 	"github.com/go-semantic-engine-v2/application/domain/external"
 	"github.com/go-semantic-engine-v2/application/domain/entity"
-	"github.com/go-semantic-engine-v2/application/tracing"
+	tracing "github.com/go-semantic-engine-v2/application/infrastructure/observability"
 	"github.com/go-semantic-engine-v2/application/controller/validator"
 
 	"go.opentelemetry.io/otel/trace"
@@ -19,10 +19,11 @@ import (
 type SemanticController struct {
 	schema validator.Schema
 	SemanticUseCase usecase.ISemanticUseCase
+	OutboxUseCase usecase.IOutboxUseCase
 }
 
 // NewSemanticController creates a new instance of SemanticController with the provided login use case.
-func NewSemanticController(semanticUseCase usecase.ISemanticUseCase) *SemanticController {
+func NewSemanticController(semanticUseCase usecase.ISemanticUseCase, outboxUseCase usecase.IOutboxUseCase) *SemanticController {
 	logger.InfoOutCtx("initializing semantic controller SUCCESSFULLY")
 
 	schema := validator.Schema{
@@ -34,6 +35,7 @@ func NewSemanticController(semanticUseCase usecase.ISemanticUseCase) *SemanticCo
 	return &SemanticController{
 		schema:       schema,
 		SemanticUseCase: semanticUseCase,
+		OutboxUseCase:  outboxUseCase,	
 	}
 }
 
@@ -67,6 +69,24 @@ func (p *SemanticController) IntentDecompose(ctx context.Context, req external.I
 	})
 	if err != nil {
 		logger.Debug(ctx, "error executing IntentDecompose controller", zap.Error(err))
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (p *SemanticController) ProcessOutbox(ctx context.Context, req external.OutboxEventRequest) ([]entity.OutboxEvent, error) {
+	logger.Info(ctx, "semantic controller ProcessOutbox called")
+
+	// Tracing and metrics
+	ctx, span := tracing.CustomStartSpanCtx(ctx, "semanticController.processOutbox", trace.SpanKindInternal)
+	defer span.End()
+
+	res, err := p.OutboxUseCase.ProcessOutbox(ctx, entity.OutboxEvent{
+		EventType: req.EventType,
+	})
+	if err != nil {
+		logger.Debug(ctx, "error executing ProcessOutbox controller", zap.Error(err))
 		return nil, err
 	}
 

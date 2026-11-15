@@ -4,11 +4,11 @@ import (
 	"context"
 	
 	"go.uber.org/zap"
-
-	"github.com/gofiber/fiber/v2"
 	"github.com/json-iterator/go"
 
-	"github.com/gofiber/fiber/v2/middleware/compress"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/contrib/v3/prometheus"
+	"github.com/gofiber/fiber/v3/middleware/compress"
 
 	"github.com/go-semantic-engine-v2/cmd/webserver/framework/fiber/adapter"
 	"github.com/go-semantic-engine-v2/application/config"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/eliezerraj/go-core/v3/logger"
 	"github.com/eliezerraj/go-core/v3/auth"
+	"github.com/eliezerraj/go-core/v3/policy"
 )
 
 // Create a new Server configuration.
@@ -32,7 +33,6 @@ func NewServerConfig(cfg *config.HTTP) FiberServerConfig {
 		Config: fiber.Config{
 			JSONEncoder:           jsoniter.Marshal,
 			JSONDecoder:           jsoniter.Unmarshal,
-			DisableStartupMessage: cfg.DisableStartupMessage,
 			ReadBufferSize:        cfg.ReadBufferSize,
 			ReadTimeout:           cfg.ReadTimeout,
 			WriteTimeout:          cfg.WriteTimeout,
@@ -85,9 +85,14 @@ func NewFiberServer(cfg *config.Config) *FiberServer {
 func setupMiddleware(cfg *config.Config, fiberApp *fiber.App) {
 	logger.InfoOutCtx("setting up middleware for fiber server")
 	
+	fiberApp.Use(middleware.TraceMiddleware())	
 	fiberApp.Use(middleware.HeaderMiddleware())
 	fiberApp.Use(middleware.RequestIDMiddleware())
 	fiberApp.Use(middleware.TraceExtractionMiddleware())
+	fiberApp.Use(prometheus.New(prometheus.Config{
+								ServiceName: cfg.App.Name,
+								MetricsPath: "/metrics",
+								}))
 
 	fiberApp.Use(compress.New(compress.Config{
 		Level: compress.LevelBestSpeed,
@@ -95,17 +100,18 @@ func setupMiddleware(cfg *config.Config, fiberApp *fiber.App) {
 }
 
 // SetupRoutes sets up the routes for the Fiber server using the provided application instance.
-func (s *FiberServer) SetupRoutes(application *application.Application) {
+func (s *FiberServer) SetupRoutes(cfg *config.Config, application *application.Application) {
 	logger.InfoOutCtx("setting up routes for fiber server SUCCESSFULLY")
 
 	root := s.FiberApp.Group("/")
 
 	// Create the AuthService instance and retrieve the JWKS URL
-	authService := auth.NewAuthService(
-		s.cfg.Authorization.JwksURL, 
-		s.cfg.Authorization.DryRun, 
-		s.cfg.Authorization.HeaderKey, 
-		s.cfg.Authorization.Timeout)
+	authService := auth.NewAuthService(	cfg.Authorization.JwksURL, 
+										cfg.Authorization.DryRun, 
+										cfg.Authorization.HeaderKey, 
+										cfg.Authorization.Timeout,
+										cfg.Authorization.Audience,
+										cfg.Authorization.ResourceMetadata)
 
 	// Retrieve the JWKS URL from the auth service
 	err := authService.GetJwksUrl(context.Background())
@@ -113,8 +119,13 @@ func (s *FiberServer) SetupRoutes(application *application.Application) {
 		logger.WarnOutCtx("Failed to get JWKS URL", zap.Error(err))
 	}
 
+	clientCedar, err := policy.NewCedarClient(cfg.Authorization.PolicyPath, cfg.Authorization.DryRun)
+	if err != nil {
+		logger.Warn(context.Background(), "Failed to create Cedar client", zap.Error(err))
+	}
+
 	// Create adapters for controllers						
-	adapters := newAdapters(s.cfg, application)
+	adapters := newAdapters(cfg, application)
 	root.Get("/health", adapters.metadataAdp.HealthGet)
 
 	appRoutes := root.Group("/v1")
@@ -124,7 +135,14 @@ func (s *FiberServer) SetupRoutes(application *application.Application) {
 	appRoutes.Get("/echo-context", adapters.metadataAdp.ContextGet)
 
 	appRoutes.Post("/search/vector", middleware.MetricsMiddleware(adapters.applicationAdp.SearchVector))
+
 	appRoutes.Post("/intent/decompose", 
 					authService.FiberAuthorizationMiddleware(),
+					clientCedar.FiberPolicyEvaluationMiddleware("post:decompose"),
 					middleware.MetricsMiddleware(adapters.applicationAdp.IntentDecompose))
+
+	appRoutes.Post("/outbox/process", 
+					authService.FiberAuthorizationMiddleware(),
+					clientCedar.FiberPolicyEvaluationMiddleware("post:process"),
+					middleware.MetricsMiddleware(adapters.applicationAdp.ProcessOutbox))
 }
