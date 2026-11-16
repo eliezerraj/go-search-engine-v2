@@ -128,3 +128,91 @@ and ced.fk_cap_id = c.id
 and ced.fk_cap_svc_id = c.fk_svc_id
 order by (e.vector <=>:v1) asc
 limit 10
+
+
+
+Step 1: Agent searches catalog
+{
+  "name": "catalog_search",
+  "arguments": {
+    "query": "update SKU inventory available 50 pending 5 sold 10",
+    "capabilityTypes": [
+      "TOOL",
+      "PROMPT"
+    ],
+    "serverIds": [
+      "py-mcp-inventory-v2-01"
+    ],
+    "limit": 5
+  }
+}
+Step 2: Gateway returns candidates
+{
+  "results": [
+    {
+      "capabilityId": "py-mcp-inventory-v2-01:TOOL:patch_product_inventory",
+      "type": "TOOL",
+      "name": "patch_product_inventory",
+      "score": 0.96
+    },
+    {
+      "capabilityId": "py-mcp-inventory-v2-01:PROMPT:inventory_patch",
+      "type": "PROMPT",
+      "name": "inventory_patch",
+      "score": 0.88
+    },
+    {
+      "capabilityId": "py-mcp-inventory-v2-01:TOOL:post_product",
+      "type": "TOOL",
+      "name": "post_product",
+      "score": 0.42
+    }
+  ]
+}
+Step 3: Agent loads the exact definition
+{
+  "capabilityId": "py-mcp-inventory-v2-01:TOOL:patch_product_inventory"
+}
+Step 4: LLM creates arguments
+{
+  "payload": {
+    "sku": "SKU-1001",
+    "inventory": {
+      "available": 50,
+      "sold": 10,
+      "pending": 5
+    }
+  }
+}
+Step 5: Agent calls the gateway
+{
+  "name": "py-mcp-inventory-v2-01.patch_product_inventory",
+  "arguments": {
+    "payload": {
+      "sku": "SKU-1001",
+      "inventory": {
+        "available": 50,
+        "sold": 10,
+        "pending": 5
+      }
+    }
+  }
+}
+Step 6: Gateway validates and routes
+Resolve registered capability
+→ validate current authorization
+→ validate arguments against exact JSON Schema
+→ confirm write policy
+→ route to py-mcp-inventory-v2-01
+→ call downstream patch_product_inventory
+→ return result
+
+deployment
+Phase 1:
+PostgreSQL + deterministic filtering + BM25-like PostgreSQL full-text search
+
+Phase 2:
+OpenSearch BM25 when multiple servers and larger catalogs are onboarded
+
+Phase 3:
+OpenSearch hybrid BM25 + TEI embeddings when real search telemetry shows semantic misses

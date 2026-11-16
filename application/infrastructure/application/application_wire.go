@@ -141,9 +141,10 @@ func NewApplication(cfg *config.Config) (*Application, error) {
 	// UseCase initialization	
 	semanticUsecase := usecase.NewSemanticUseCase(semanticRepository, modelModule)
 	outboxUsecase := usecase.NewOutboxUseCase(outboxRepository, openSearchRepository)
+	openSearchUsecase := usecase.NewOpenSearchUseCase(openSearchRepository)
 
 	// Controller initialization
-	semanticController := controller.NewSemanticController(semanticUsecase, outboxUsecase)
+	semanticController := controller.NewSemanticController(semanticUsecase, outboxUsecase, openSearchUsecase)
 
 	return &Application{
 		SemanticController: semanticController,

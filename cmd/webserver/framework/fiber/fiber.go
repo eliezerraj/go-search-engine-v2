@@ -145,4 +145,9 @@ func (s *FiberServer) SetupRoutes(cfg *config.Config, application *application.A
 					authService.FiberAuthorizationMiddleware(),
 					clientCedar.FiberPolicyEvaluationMiddleware("post:process"),
 					middleware.MetricsMiddleware(adapters.applicationAdp.ProcessOutbox))
+
+	appRoutes.Post("/opensearch/search", 
+					authService.FiberAuthorizationMiddleware(),
+					clientCedar.FiberPolicyEvaluationMiddleware("post:opensearch.search"),
+					middleware.MetricsMiddleware(adapters.applicationAdp.OpenSearchSearch))
 }

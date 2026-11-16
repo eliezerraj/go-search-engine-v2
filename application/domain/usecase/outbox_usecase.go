@@ -24,10 +24,7 @@ type IOutboxUseCase interface {
 	ProcessOutbox(ctx context.Context, outBoxEvent entity.OutboxEvent) (events []entity.OutboxEvent, err error)
 }
 
-func NewOutboxUseCase(
-	outboxRepository repository.IOutboxRepository,
-	openSearchRepository repository.IOpenSearchRepository,
-) IOutboxUseCase {
+func NewOutboxUseCase(outboxRepository repository.IOutboxRepository,openSearchRepository repository.IOpenSearchRepository,) IOutboxUseCase {
 	logger.InfoOutCtx("initializing outbox usecase SUCCESSFULLY")
 	
 	return &OutboxUseCase{

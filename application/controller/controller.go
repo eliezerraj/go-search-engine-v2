@@ -20,10 +20,15 @@ type SemanticController struct {
 	schema validator.Schema
 	SemanticUseCase usecase.ISemanticUseCase
 	OutboxUseCase usecase.IOutboxUseCase
+	OpenSearchUseCase usecase.IOpenSearchUseCase
 }
 
 // NewSemanticController creates a new instance of SemanticController with the provided login use case.
-func NewSemanticController(semanticUseCase usecase.ISemanticUseCase, outboxUseCase usecase.IOutboxUseCase) *SemanticController {
+func NewSemanticController(
+	semanticUseCase usecase.ISemanticUseCase,
+	outboxUseCase usecase.IOutboxUseCase,
+	openSearchUseCase usecase.IOpenSearchUseCase,
+) *SemanticController {
 	logger.InfoOutCtx("initializing semantic controller SUCCESSFULLY")
 
 	schema := validator.Schema{
@@ -35,7 +40,8 @@ func NewSemanticController(semanticUseCase usecase.ISemanticUseCase, outboxUseCa
 	return &SemanticController{
 		schema:       schema,
 		SemanticUseCase: semanticUseCase,
-		OutboxUseCase:  outboxUseCase,	
+		OutboxUseCase:  outboxUseCase,
+		OpenSearchUseCase: openSearchUseCase,
 	}
 }
 
@@ -87,6 +93,27 @@ func (p *SemanticController) ProcessOutbox(ctx context.Context, req external.Out
 	})
 	if err != nil {
 		logger.Debug(ctx, "error executing ProcessOutbox controller", zap.Error(err))
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (p *SemanticController) OpenSearchSearch(ctx context.Context, req external.Bm25SearchRequest) ([]entity.Bm25SearchResult, error) {
+	logger.Info(ctx, "semantic controller OpenSearchSearch called")
+
+	// Tracing and metrics
+	ctx, span := tracing.CustomStartSpanCtx(ctx, "semanticController.openSearchSearch", trace.SpanKindInternal)
+	defer span.End()
+
+	res, err := p.OpenSearchUseCase.OpenSearchSearch(ctx, entity.Bm25SearchQuery{
+		Query:           req.Query,
+		CapabilityTypes: req.CapabilityTypes,
+		ServerIds:       req.ServerIds,
+		Limit:           req.Limit,
+	})
+	if err != nil {
+		logger.Debug(ctx, "error executing OpenSearchSearch controller", zap.Error(err))
 		return nil, err
 	}
 

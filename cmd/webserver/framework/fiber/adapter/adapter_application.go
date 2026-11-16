@@ -220,3 +220,63 @@ func (a *ApplicationAdapter) ProcessOutbox(ctxFiber fiber.Ctx) error {
 
 	return ctxFiber.Status(fiber.StatusOK).JSON(resp)
 }
+
+func (a *ApplicationAdapter) OpenSearchSearch(ctxFiber fiber.Ctx) error {
+	logger.Info(ctxFiber.Context(), "OpenSearchSearch called")
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctxFiber.Context(), a.cfg.HTTP.Timeout)
+	defer cancel()
+
+	// Tracing and metrics
+	ctx, span := tracing.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.openSearchSearch", trace.SpanKindInternal)
+	defer span.End()
+
+	logger.Debug(
+		ctx,
+		a.cfg.App.Name,
+		zap.ByteString("headers", utils.FormatHeadersAsJSON(ctxFiber.GetReqHeaders())),
+		zap.String("host", ctxFiber.Hostname()),
+		zap.String("path", ctxFiber.Path()),
+		zap.ByteString("query", ctxFiber.Request().URI().QueryString()),
+		zap.ByteString("body", ctxFiber.Body()),
+	)
+
+	var query external.Bm25SearchRequest
+	if err := ctxFiber.Bind().Body(&query); err != nil {
+		logger.Error(ctx, "failed to parse request body", zap.Error(err))
+		errorResponse := external.NewResponseError(ctx,
+			fiber.StatusBadRequest,
+			fiber.ErrBadRequest,
+			fiber.ErrBadRequest.Message,
+			"failed to parse request body",
+			err.Error(),
+			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusBadRequest),
+		)
+		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
+	}
+
+	// Pass the parsed request to the controller
+	res, err := a.application.SemanticController.OpenSearchSearch(ctx, query)
+	if err != nil {
+		logger.Error(ctx, "failed to perform OpenSearch search", zap.Error(err))
+		errorResponse := external.NewResponseError(ctx,
+			fiber.StatusInternalServerError,
+			fiber.ErrInternalServerError,
+			fiber.ErrInternalServerError.Message,
+			"failed to perform OpenSearch search",
+			err.Error(),
+			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusInternalServerError),
+		)
+		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
+	}
+
+	resp := external.Bm25SearchResponse{
+		Results: res,
+	}
+
+	return ctxFiber.Status(fiber.StatusOK).JSON(resp)
+}
