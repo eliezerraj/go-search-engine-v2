@@ -7,11 +7,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/go-semantic-engine-v2/application/domain/entity"
+	"github.com/go-search-engine-v2/application/domain/entity"
 
-	"github.com/go-semantic-engine-v2/application/infrastructure/repository"
+	"github.com/go-search-engine-v2/application/infrastructure/repository"
 	"github.com/eliezerraj/go-core/v3/logger"
-	tracing "github.com/go-semantic-engine-v2/application/infrastructure/observability"
+	tracing "github.com/go-search-engine-v2/application/infrastructure/observability"
 
 	"go.opentelemetry.io/otel/trace"
 )

@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap"
 	stdLog "log"
 
-	"github.com/go-semantic-engine-v2/cmd/webserver"
-	"github.com/go-semantic-engine-v2/application/config"
+	"github.com/go-search-engine-v2/cmd/webserver"
+	"github.com/go-search-engine-v2/application/config"
 
 	"github.com/eliezerraj/go-core/v3/logger"
 	tracing "github.com/eliezerraj/go-core/v3/observability/tracing"

@@ -7,9 +7,9 @@ import (
 
 	"github.com/eliezerraj/go-core/v3/logger"
 
-	"github.com/go-semantic-engine-v2/application/infrastructure/application"
-	"github.com/go-semantic-engine-v2/cmd/webserver/framework/fiber"
-	"github.com/go-semantic-engine-v2/application/config"
+	"github.com/go-search-engine-v2/application/infrastructure/application"
+	"github.com/go-search-engine-v2/cmd/webserver/framework/fiber"
+	"github.com/go-search-engine-v2/application/config"
 )
 
 type WebServer struct {

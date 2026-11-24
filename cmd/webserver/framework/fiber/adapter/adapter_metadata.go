@@ -6,7 +6,7 @@ import (
 
 	"github.com/eliezerraj/go-core/v3/logger"
 
-	"github.com/go-semantic-engine-v2/application/config"
+	"github.com/go-search-engine-v2/application/config"
 )
 type MetadataAdapter struct {
 	cfg *config.Config

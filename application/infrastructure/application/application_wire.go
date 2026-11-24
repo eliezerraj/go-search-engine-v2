@@ -10,11 +10,11 @@ import (
 	"github.com/eliezerraj/go-core/v3/database/connector"
 	"github.com/eliezerraj/go-core/v3/httpclient"
 
-	"github.com/go-semantic-engine-v2/application/infrastructure/repository"
-	"github.com/go-semantic-engine-v2/application/config"
-	"github.com/go-semantic-engine-v2/application/controller"
-	"github.com/go-semantic-engine-v2/application/domain/usecase"
-	"github.com/go-semantic-engine-v2/application/infrastructure/module"
+	"github.com/go-search-engine-v2/application/infrastructure/repository"
+	"github.com/go-search-engine-v2/application/config"
+	"github.com/go-search-engine-v2/application/controller"
+	"github.com/go-search-engine-v2/application/domain/usecase"
+	"github.com/go-search-engine-v2/application/infrastructure/module"
 )
 
 type Application struct {

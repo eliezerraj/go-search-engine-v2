@@ -6,11 +6,11 @@ import (
 	"go.uber.org/zap"
 	"errors"
 
-	"github.com/go-semantic-engine-v2/application/config"
-	"github.com/go-semantic-engine-v2/application/infrastructure/application"
-	"github.com/go-semantic-engine-v2/application/domain/external"
-	"github.com/go-semantic-engine-v2/application/infrastructure/observability"
-	"github.com/go-semantic-engine-v2/application/domain/apperrors"
+	"github.com/go-search-engine-v2/application/config"
+	"github.com/go-search-engine-v2/application/infrastructure/application"
+	"github.com/go-search-engine-v2/application/domain/external"
+	"github.com/go-search-engine-v2/application/infrastructure/observability"
+	"github.com/go-search-engine-v2/application/domain/apperrors"
 
 	"github.com/eliezerraj/go-core/v3/logger"
 	"github.com/eliezerraj/go-core/v3/http/utils"

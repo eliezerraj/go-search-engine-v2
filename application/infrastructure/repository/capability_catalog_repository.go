@@ -8,8 +8,8 @@ import (
 
 	"github.com/eliezerraj/go-core/v3/database/connector"
 	"github.com/eliezerraj/go-core/v3/logger"
-	"github.com/go-semantic-engine-v2/application/domain/entity"
-	tracing "github.com/go-semantic-engine-v2/application/infrastructure/observability"
+	"github.com/go-search-engine-v2/application/domain/entity"
+	tracing "github.com/go-search-engine-v2/application/infrastructure/observability"
 
 	"go.opentelemetry.io/otel/trace"
 )
