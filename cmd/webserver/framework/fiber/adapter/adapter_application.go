@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"context"
 	"go.uber.org/zap"
+	"errors"
 
 	"github.com/go-semantic-engine-v2/application/config"
 	"github.com/go-semantic-engine-v2/application/infrastructure/application"
 	"github.com/go-semantic-engine-v2/application/domain/external"
-	tracing "github.com/go-semantic-engine-v2/application/infrastructure/observability"
+	"github.com/go-semantic-engine-v2/application/infrastructure/observability"
+	"github.com/go-semantic-engine-v2/application/domain/apperrors"
 
 	"github.com/eliezerraj/go-core/v3/logger"
 	"github.com/eliezerraj/go-core/v3/http/utils"
@@ -40,7 +42,7 @@ func (a *ApplicationAdapter) SearchVector(ctxFiber fiber.Ctx) error {
 	defer cancel()
 
 	// Tracing and metrics
-	ctx, span := tracing.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.searchVector", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.searchVector", trace.SpanKindInternal)
 	defer span.End()
 
 	logger.Debug(
@@ -100,7 +102,7 @@ func (a *ApplicationAdapter) IntentDecompose(ctxFiber fiber.Ctx) error {
 	defer cancel()
 
 	// Tracing and metrics
-	ctx, span := tracing.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.intentDecompose", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.intentDecompose", trace.SpanKindInternal)
 	defer span.End()
 
 	logger.Debug(
@@ -162,7 +164,7 @@ func (a *ApplicationAdapter) ProcessOutbox(ctxFiber fiber.Ctx) error {
 	defer cancel()
 
 	// Tracing and metrics
-	ctx, span := tracing.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.processOutbox", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.processOutbox", trace.SpanKindInternal)
 	defer span.End()
 
 	logger.Debug(
@@ -228,7 +230,7 @@ func (a *ApplicationAdapter) OpenSearchSearch(ctxFiber fiber.Ctx) error {
 	defer cancel()
 
 	// Tracing and metrics
-	ctx, span := tracing.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.openSearchSearch", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.openSearchSearch", trace.SpanKindInternal)
 	defer span.End()
 
 	logger.Debug(
@@ -260,16 +262,32 @@ func (a *ApplicationAdapter) OpenSearchSearch(ctxFiber fiber.Ctx) error {
 	// Pass the parsed request to the controller
 	res, err := a.application.SemanticController.OpenSearchSearch(ctx, query)
 	if err != nil {
-		logger.Error(ctx, "failed to perform OpenSearch search", zap.Error(err))
+		var statusCode int
+		var statusCodeMessage string
+
+		fmt.Println("================ Error occurred during OpenSearch search:", err)
+
+		if errors.Is(err, apperrors.ErrNotFound) {
+			fmt.Println("================ OpenSearch result not found =================")
+			logger.Warn(ctx, "OpenSearch result not found", zap.Error(err))
+			statusCode = fiber.StatusNotFound
+			statusCodeMessage = fiber.ErrNotFound.Message
+		} else {
+			fmt.Println("================ Error occurred during OpenSearch search:", err)	
+			logger.Error(ctx, "failed to perform OpenSearch search", zap.Error(err))
+			statusCode = fiber.StatusInternalServerError
+			statusCodeMessage = fiber.ErrInternalServerError.Message
+		}
+
 		errorResponse := external.NewResponseError(ctx,
-			fiber.StatusInternalServerError,
-			fiber.ErrInternalServerError,
-			fiber.ErrInternalServerError.Message,
+			statusCode,
+			fiber.NewError(statusCode),
+			statusCodeMessage,
 			"failed to perform OpenSearch search",
 			err.Error(),
 			external.BUSSINESS_ERROR)
 		span.SetAttributes(
-				attribute.Int("http.response.status_code", fiber.StatusInternalServerError),
+			attribute.Int("http.response.status_code", statusCode),
 		)
 		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
 	}
@@ -277,6 +295,10 @@ func (a *ApplicationAdapter) OpenSearchSearch(ctxFiber fiber.Ctx) error {
 	resp := external.Bm25SearchResponse{
 		Results: res,
 	}
+
+	span.SetAttributes(
+		attribute.Int("http.response.status_code", fiber.StatusOK),
+	)
 
 	return ctxFiber.Status(fiber.StatusOK).JSON(resp)
 }

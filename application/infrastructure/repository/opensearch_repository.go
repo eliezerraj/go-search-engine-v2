@@ -15,7 +15,8 @@ import (
 	"github.com/eliezerraj/go-core/v3/logger"
 	"github.com/go-semantic-engine-v2/application/config"
 	"github.com/go-semantic-engine-v2/application/domain/entity"
-	tracing "github.com/go-semantic-engine-v2/application/infrastructure/observability"
+	"github.com/go-semantic-engine-v2/application/infrastructure/observability"
+	"github.com/go-semantic-engine-v2/application/domain/apperrors"
 
 	"go.opentelemetry.io/otel/trace"
 )
@@ -56,7 +57,7 @@ func NewOpenSearchRepository(cfg config.OpenSearch) IOpenSearchRepository {
 func (r *OpenSearchRepository) PostOutboxEvent(ctx context.Context, event entity.OutboxEvent) error {
 	logger.Info(ctx, "opensearch repository PostOutboxEvent called", zap.Any("outbox_event_id", event.ID))
 
-	ctx, span := tracing.CustomStartSpanCtx(ctx, "openSearchRepository.PostOutboxEvent", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctx, "openSearchRepository.PostOutboxEvent", trace.SpanKindInternal)
 	defer span.End()
 
 	var payload any
@@ -114,7 +115,7 @@ func (r *OpenSearchRepository) PostOutboxEvent(ctx context.Context, event entity
 func (r *OpenSearchRepository) GetOutboxEvent(ctx context.Context, id int64) (map[string]any, error) {
 	logger.Info(ctx, "opensearch repository GetOutboxEvent called", zap.Any("outbox_event_id", id))
 
-	ctx, span := tracing.CustomStartSpanCtx(ctx, "openSearchRepository.GetOutboxEvent", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctx, "openSearchRepository.GetOutboxEvent", trace.SpanKindInternal)
 	defer span.End()
 
 	req, err := http.NewRequestWithContext(
@@ -151,7 +152,7 @@ func (r *OpenSearchRepository) GetOutboxEvent(ctx context.Context, id int64) (ma
 func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entity.Bm25SearchQuery) ([]entity.Bm25SearchResult, error) {
 	logger.Info(ctx, "opensearch repository OpenSearchSearch called", zap.Any("query", query))
 	
-	ctx, span := tracing.CustomStartSpanCtx(ctx, "openSearchRepository.OpenSearchSearch", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctx, "openSearchRepository.OpenSearchSearch", trace.SpanKindInternal)
 	defer span.End()
 
 	limit := query.Limit
@@ -218,6 +219,9 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Error(ctx, "opensearch search failed", zap.Any("status", resp.StatusCode))
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("opensearch search failed: status=%d: %w", resp.StatusCode, apperrors.ErrNotFound)
+		}
 		return nil, fmt.Errorf("opensearch search failed: status=%d", resp.StatusCode)
 	}
 
