@@ -17,7 +17,7 @@ import (
 
 	"github.com/go-semantic-engine-v2/application/config"
 	"github.com/go-semantic-engine-v2/application/domain/entity"
-	"github.com/go-semantic-engine-v2/application/tracing"
+	tracing "github.com/go-semantic-engine-v2/application/infrastructure/observability"
 )
 
 const (

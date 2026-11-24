@@ -42,11 +42,39 @@ type Database struct {
 	HealthCheckTimeout    time.Duration `env:"DB_HEALTH_CHECK_TIMEOUT" envDefault:"15s"`
 }
 
+type Database2 struct {
+	DSN                   string
+	Host                  string        `env:"DB_HOST_2,required,notEmpty"`
+	Port                  string        `env:"DB_PORT_2,required,notEmpty"`
+	Username              string        `env:"DB_USERNAME_2,required,notEmpty"`
+	Password              string        `env:"DB_PASSWORD_2,required,notEmpty"`
+	Name                  string        `env:"DB_NAME_2,required,notEmpty"`
+	Schema                string        `env:"DB_SCHEMA_2" envDefault:"postgres"`
+	QueryTracer           bool          `env:"DATABASE_QUERY_TRACER_2" envDefault:"false"`
+	MaxConnections        int32         `env:"DB_MAX_CONNS_2" envDefault:"5"`
+	MinConnections        int32         `env:"DB_MIN_CONNS_2" envDefault:"5"`
+	ConnTimeout           time.Duration `env:"DB_CONNECTION_TIMEOUT_DURATION_2" envDefault:"5s"`
+	ConnLifetime          time.Duration `env:"DB_LIFE_TIME_CONNS_2" envDefault:"28s"`
+	ConnIdleTime          time.Duration `env:"DB_IDLE_TIME_CONNS_2" envDefault:"28s"`
+	MaxConnLifetimeJitter time.Duration `env:"DB_MAX_LIFE_TIME_JITTER_CONNS_2" envDefault:"2m"`
+	HealthCheckTimeout    time.Duration `env:"DB_HEALTH_CHECK_TIMEOUT_2" envDefault:"15s"`
+}
+
+type OpenSearch struct {
+	Endpoint string `env:"OPENSEARCH_ENDPOINT"`
+	Username string `env:"OPENSEARCH_USERNAME"`
+	Password string `env:"OPENSEARCH_PASSWORD"`
+}
+
 type Authorization struct {
+	PolicyPath			string `env:"AUTHORIZATION_POLICY_PATH"`
 	HeaderKey 			string `env:"AUTHORIZATION_HEADER_KEY,required"`
 	DryRun  			bool   `env:"AUTHORIZATION_DRY_RUN,required"`
+	AuthorizationServer string `env:"AUTHORIZATION_SERVER"`
 	JwksURL 			string `env:"AUTHORIZATION_JWKS_URL"`
 	RequiredAuthHeader  bool   `env:"AUTHORIZATION_REQUIRED_HEADER"`
+	Audience 			string `env:"AUTHORIZATION_AUDIENCE"`
+	ResourceMetadata 	string `env:"AUTHORIZATION_OAUTH_PROTECTED_RESOURCE_URL"`
 	Timeout             time.Duration `env:"AUTHORIZATION_TIMEOUT" envDefault:"15s"`
 }
 
@@ -73,22 +101,17 @@ type Config struct {
 	App         App
 	HTTP        HTTP
 	Database    Database
+	Database2   Database2
 	Authorization Authorization
 	Log         Log
 	OtelEnv		OtelEnv
-	TokenConfig TokenConfig
 	Vector      VectorEndpoint
-}
-
-type TokenConfig struct {
-	TokenTTL time.Duration `env:"TOKEN_TTL" envDefault:"3600s"`
+	OpenSearch  OpenSearch
 }
 
 type OtelEnv struct {
 	OtelExportEndpoint			string	`env:"OTEL_EXPORTER_OTLP_ENDPOINT" envDefault:"127.0.0.1:4317"`
-	UseStdoutTracerExporter		bool	`env:"OTEL_STDOUT_TRACER" envDefault:"false"`
-	UseOtlpCollector			bool	`env:"OTEL_COLLECTOR" envDefault:"true"`
-	OtelMetricsPort				string	`env:"OTEL_METRICS_PORT" envDefault:"9000"`
+	OtelMetricsPort				string	`env:"OTEL_METRICS_PORT"`
 }
 
 func Load() (cfg *Config, err error) {

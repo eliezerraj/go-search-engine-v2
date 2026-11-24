@@ -1,20 +1,24 @@
 package adapter
 
 import (
+	"fmt"
 	"context"
 	"go.uber.org/zap"
+	"errors"
 
 	"github.com/go-semantic-engine-v2/application/config"
 	"github.com/go-semantic-engine-v2/application/infrastructure/application"
 	"github.com/go-semantic-engine-v2/application/domain/external"
-	"github.com/go-semantic-engine-v2/application/tracing"
+	"github.com/go-semantic-engine-v2/application/infrastructure/observability"
+	"github.com/go-semantic-engine-v2/application/domain/apperrors"
 
 	"github.com/eliezerraj/go-core/v3/logger"
 	"github.com/eliezerraj/go-core/v3/http/utils"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type ApplicationAdapter struct {
@@ -31,14 +35,15 @@ func NewApplicationAdapter(cfg *config.Config, application *application.Applicat
 	}
 }
 
-func (a *ApplicationAdapter) SearchVector(ctxFiber *fiber.Ctx) error {
-	ctxWithTimeout, cancel := context.WithTimeout(ctxFiber.UserContext(), a.cfg.HTTP.Timeout)
+func (a *ApplicationAdapter) SearchVector(ctxFiber fiber.Ctx) error {
+	logger.Info(ctxFiber.Context(), "SearchVector called")
+	
+	ctxWithTimeout, cancel := context.WithTimeout(ctxFiber.Context(), a.cfg.HTTP.Timeout)
 	defer cancel()
 
 	// Tracing and metrics
-	ctx, span := tracing.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.searchVector", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.searchVector", trace.SpanKindInternal)
 	defer span.End()
-	logger.Info(ctx, "SearchVector called")
 
 	logger.Debug(
 		ctx,
@@ -51,7 +56,7 @@ func (a *ApplicationAdapter) SearchVector(ctxFiber *fiber.Ctx) error {
 	)
 
 	searchVectorReq := external.VectorSearchRequest{}
-	if err := ctxFiber.BodyParser(&searchVectorReq); err != nil {
+	if err := ctxFiber.Bind().Body(&searchVectorReq); err != nil {
 		logger.Error(ctx, "failed to parse request body", zap.Error(err))
 		errorResponse := external.NewResponseError(ctx,
 			fiber.StatusBadRequest,
@@ -60,6 +65,9 @@ func (a *ApplicationAdapter) SearchVector(ctxFiber *fiber.Ctx) error {
 			"failed to parse request body",
 			err.Error(),
 			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusBadRequest),
+		)
 		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
 	}
 
@@ -73,6 +81,9 @@ func (a *ApplicationAdapter) SearchVector(ctxFiber *fiber.Ctx) error {
 			"failed to search vector",
 			err.Error(),
 			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusInternalServerError),
+		)
 		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
 	}
 
@@ -84,14 +95,15 @@ func (a *ApplicationAdapter) SearchVector(ctxFiber *fiber.Ctx) error {
 	return ctxFiber.Status(fiber.StatusOK).JSON(resp)
 }
 
-func (a *ApplicationAdapter) IntentDecompose(ctxFiber *fiber.Ctx) error {
-	ctxWithTimeout, cancel := context.WithTimeout(ctxFiber.UserContext(), a.cfg.HTTP.Timeout)
+func (a *ApplicationAdapter) IntentDecompose(ctxFiber fiber.Ctx) error {
+	logger.Info(ctxFiber.Context(), "IntentDecompose called")
+	
+	ctxWithTimeout, cancel := context.WithTimeout(ctxFiber.Context(), a.cfg.HTTP.Timeout)
 	defer cancel()
 
 	// Tracing and metrics
-	ctx, span := tracing.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.intentDecompose", trace.SpanKindInternal)
+	ctx, span := observability.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.intentDecompose", trace.SpanKindInternal)
 	defer span.End()
-	logger.Info(ctx, "IntentDecompose called")
 
 	logger.Debug(
 		ctx,
@@ -104,7 +116,7 @@ func (a *ApplicationAdapter) IntentDecompose(ctxFiber *fiber.Ctx) error {
 	)
 
 	intentDecomposeReq := external.IntentDecomposeRequest{}
-	if err := ctxFiber.BodyParser(&intentDecomposeReq); err != nil {
+	if err := ctxFiber.Bind().Body(&intentDecomposeReq); err != nil {
 		logger.Error(ctx, "failed to parse request body", zap.Error(err))
 		errorResponse := external.NewResponseError(ctx,
 			fiber.StatusBadRequest,
@@ -113,6 +125,9 @@ func (a *ApplicationAdapter) IntentDecompose(ctxFiber *fiber.Ctx) error {
 			"failed to parse request body",
 			err.Error(),
 			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusBadRequest),
+		)
 		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
 	}
 
@@ -127,6 +142,9 @@ func (a *ApplicationAdapter) IntentDecompose(ctxFiber *fiber.Ctx) error {
 			"failed to decompose intent",
 			err.Error(),
 			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusInternalServerError),
+		)
 		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
 	}
 
@@ -134,6 +152,153 @@ func (a *ApplicationAdapter) IntentDecompose(ctxFiber *fiber.Ctx) error {
 		Response: "Intent decomposition successful",
 		Intent:   res,
 	}
+
+	return ctxFiber.Status(fiber.StatusOK).JSON(resp)
+}
+
+func (a *ApplicationAdapter) ProcessOutbox(ctxFiber fiber.Ctx) error {
+	var message string
+	logger.Info(ctxFiber.Context(), "ProcessOutbox called")
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctxFiber.Context(), a.cfg.HTTP.Timeout)
+	defer cancel()
+
+	// Tracing and metrics
+	ctx, span := observability.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.processOutbox", trace.SpanKindInternal)
+	defer span.End()
+
+	logger.Debug(
+		ctx,
+		a.cfg.App.Name,
+		zap.ByteString("headers", utils.FormatHeadersAsJSON(ctxFiber.GetReqHeaders())),
+		zap.String("host", ctxFiber.Hostname()),
+		zap.String("path", ctxFiber.Path()),
+		zap.ByteString("query", ctxFiber.Request().URI().QueryString()),
+		zap.ByteString("body", ctxFiber.Body()),
+	)
+
+	outBoxEvent := external.OutboxEventRequest{}
+	if err := ctxFiber.Bind().Body(&outBoxEvent); err != nil {
+		logger.Error(ctx, "failed to parse request body", zap.Error(err))
+		errorResponse := external.NewResponseError(ctx,
+			fiber.StatusBadRequest,
+			fiber.ErrBadRequest,
+			fiber.ErrBadRequest.Message,
+			"failed to parse request body",
+			err.Error(),
+			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusBadRequest),
+		)
+		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
+	}
+
+	// Pass the parsed request to the controller
+	res, err := a.application.SemanticController.ProcessOutbox(ctx, outBoxEvent)
+	if err != nil {
+		logger.Error(ctx, "failed to process outbox", zap.Error(err))
+		errorResponse := external.NewResponseError(ctx,
+			fiber.StatusInternalServerError,
+			fiber.ErrInternalServerError,
+			fiber.ErrInternalServerError.Message,
+			"failed to process outbox",
+			err.Error(),
+			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusInternalServerError),
+		)
+		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
+	}
+
+	message = "Outbox processed successfully"
+
+	if res == nil {
+		message = "No outbox event to process for this request {outBoxEvent: " + fmt.Sprintf("%v", outBoxEvent) + "}"
+	}
+	resp := external.OutBoxEventResponse{
+		Response: message,
+		Event:    res,
+	}
+
+	return ctxFiber.Status(fiber.StatusOK).JSON(resp)
+}
+
+func (a *ApplicationAdapter) OpenSearchSearch(ctxFiber fiber.Ctx) error {
+	logger.Info(ctxFiber.Context(), "OpenSearchSearch called")
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctxFiber.Context(), a.cfg.HTTP.Timeout)
+	defer cancel()
+
+	// Tracing and metrics
+	ctx, span := observability.CustomStartSpanCtx(ctxWithTimeout, "applicationAdapter.openSearchSearch", trace.SpanKindInternal)
+	defer span.End()
+
+	logger.Debug(
+		ctx,
+		a.cfg.App.Name,
+		zap.ByteString("headers", utils.FormatHeadersAsJSON(ctxFiber.GetReqHeaders())),
+		zap.String("host", ctxFiber.Hostname()),
+		zap.String("path", ctxFiber.Path()),
+		zap.ByteString("query", ctxFiber.Request().URI().QueryString()),
+		zap.ByteString("body", ctxFiber.Body()),
+	)
+
+	var query external.Bm25SearchRequest
+	if err := ctxFiber.Bind().Body(&query); err != nil {
+		logger.Error(ctx, "failed to parse request body", zap.Error(err))
+		errorResponse := external.NewResponseError(ctx,
+			fiber.StatusBadRequest,
+			fiber.ErrBadRequest,
+			fiber.ErrBadRequest.Message,
+			"failed to parse request body",
+			err.Error(),
+			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+				attribute.Int("http.response.status_code", fiber.StatusBadRequest),
+		)
+		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
+	}
+
+	// Pass the parsed request to the controller
+	res, err := a.application.SemanticController.OpenSearchSearch(ctx, query)
+	if err != nil {
+		var statusCode int
+		var statusCodeMessage string
+
+		fmt.Println("================ Error occurred during OpenSearch search:", err)
+
+		if errors.Is(err, apperrors.ErrNotFound) {
+			fmt.Println("================ OpenSearch result not found =================")
+			logger.Warn(ctx, "OpenSearch result not found", zap.Error(err))
+			statusCode = fiber.StatusNotFound
+			statusCodeMessage = fiber.ErrNotFound.Message
+		} else {
+			fmt.Println("================ Error occurred during OpenSearch search:", err)	
+			logger.Error(ctx, "failed to perform OpenSearch search", zap.Error(err))
+			statusCode = fiber.StatusInternalServerError
+			statusCodeMessage = fiber.ErrInternalServerError.Message
+		}
+
+		errorResponse := external.NewResponseError(ctx,
+			statusCode,
+			fiber.NewError(statusCode),
+			statusCodeMessage,
+			"failed to perform OpenSearch search",
+			err.Error(),
+			external.BUSSINESS_ERROR)
+		span.SetAttributes(
+			attribute.Int("http.response.status_code", statusCode),
+		)
+		return ctxFiber.Status(errorResponse.StatusCode).JSON(errorResponse)
+	}
+
+	resp := external.Bm25SearchResponse{
+		Results: res,
+	}
+
+	span.SetAttributes(
+		attribute.Int("http.response.status_code", fiber.StatusOK),
+	)
 
 	return ctxFiber.Status(fiber.StatusOK).JSON(resp)
 }

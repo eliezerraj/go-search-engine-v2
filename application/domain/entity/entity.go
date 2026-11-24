@@ -1,5 +1,10 @@
 package entity
 
+import (
+	"encoding/json"
+	"time"
+)
+
 type VectorSearch struct {
 	Text string `json:"text,omitempty"`
     Embedding []float64 `json:"embedding,omitempty"`
@@ -19,9 +24,43 @@ type IntentDecompose struct {
 }
 
 type TeiModel struct {
-	Inputs string `json:"inputs,omitempty"`
-    Normalize bool `json:"normalize,omitempty"`
-    Truncate bool `json:"truncate,omitempty"`
+	Inputs 				string `json:"inputs,omitempty"`
+    Normalize 			bool `json:"normalize,omitempty"`
+    Truncate 			bool `json:"truncate,omitempty"`
     TruncationDirection string `json:"truncation_direction,omitempty"`
-    Embedding []float64 `json:"embedding,omitempty"`
+    Embedding 			[]float64 `json:"embedding,omitempty"`
+}
+
+type OutboxEvent struct {
+	ID            int64           `json:"id"`
+	AggregateType string          `json:"aggregate_type"`
+	AggregateID   string          `json:"aggregate_id"`
+	EventType     string          `json:"event_type"`
+	Payload       json.RawMessage `json:"payload"`
+	CreatedAt     time.Time       `json:"created_at"`
+	PublishedAt   *time.Time      `json:"published_at,omitempty"`
+	Attempts      int32           `json:"attempts"`
+	LastError     *string         `json:"last_error,omitempty"`
+}
+
+type Bm25SearchQuery struct {
+	Query           string   `json:"query" validate:"required"`
+	CapabilityTypes []string `json:"capability_types,omitempty"`
+	ServerIds       []string `json:"server_ids,omitempty"`
+	Limit           int      `json:"limit,omitempty"`
+}
+
+type Bm25SearchResult struct {
+	CapabilityID string  `json:"capability_id"`
+	Type         string  `json:"type"`
+	Name         string  `json:"name"`
+	ServerID     string  `json:"server_id"`
+	Score        float64 `json:"score"`
+	Invocation   json.RawMessage `json:"invocation,omitempty"`
+}
+
+type CapabilityInvocationKey struct {
+	ServerID       string
+	CapabilityType string
+	Identifier     string
 }
