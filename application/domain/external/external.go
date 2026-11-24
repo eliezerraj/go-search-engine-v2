@@ -1,6 +1,6 @@
 package external
 
-import "github.com/go-semantic-engine-v2/application/domain/entity"
+import "github.com/go-search-engine-v2/application/domain/entity"
 
 type VectorSearchRequest struct {
 	Text string `json:"text" validate:"required"`

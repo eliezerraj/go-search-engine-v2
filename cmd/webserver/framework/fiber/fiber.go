@@ -10,10 +10,10 @@ import (
 	"github.com/gofiber/contrib/v3/prometheus"
 	"github.com/gofiber/fiber/v3/middleware/compress"
 
-	"github.com/go-semantic-engine-v2/cmd/webserver/framework/fiber/adapter"
-	"github.com/go-semantic-engine-v2/application/config"
-	"github.com/go-semantic-engine-v2/application/infrastructure/application"
-	"github.com/go-semantic-engine-v2/cmd/webserver/framework/fiber/middleware"
+	"github.com/go-search-engine-v2/cmd/webserver/framework/fiber/adapter"
+	"github.com/go-search-engine-v2/application/config"
+	"github.com/go-search-engine-v2/application/infrastructure/application"
+	"github.com/go-search-engine-v2/cmd/webserver/framework/fiber/middleware"
 
 	"github.com/eliezerraj/go-core/v3/logger"
 	"github.com/eliezerraj/go-core/v3/auth"

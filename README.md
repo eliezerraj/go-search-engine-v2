@@ -1,5 +1,5 @@
-# go-semantic-engine-v2
-go-semantic-engine-v2
+# go-search-engine-v2
+go-search-engine-v2
 
 
 jq -c . get_product_by_SKU > get_product_by_SKU_horizontal

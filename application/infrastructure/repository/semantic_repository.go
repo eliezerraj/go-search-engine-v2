@@ -10,8 +10,8 @@ import (
 	"github.com/eliezerraj/go-core/v3/logger"
 	"github.com/eliezerraj/go-core/v3/database/connector"
 
-	tracing "github.com/go-semantic-engine-v2/application/infrastructure/observability"
-	"github.com/go-semantic-engine-v2/application/domain/entity"
+	tracing "github.com/go-search-engine-v2/application/infrastructure/observability"
+	"github.com/go-search-engine-v2/application/domain/entity"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -43,7 +43,7 @@ func (r *SemanticRepository) SearchVector(ctx context.Context, vector entity.Vec
 	ctx, span := tracing.CustomStartSpanCtx(ctx, "semanticRepository.VectorSearch", trace.SpanKindInternal)
 	defer span.End()
 
-	meter := otel.Meter("go-semantic-engine-v2.repository")
+	meter := otel.Meter("go-search-engine-v2.repository")
     counter, _ := meter.Int64Counter("db_custom_vector_search_requests_total")
     histogram, _ := meter.Float64Histogram("db_custom_vector_search_duration_seconds")
     start := time.Now()

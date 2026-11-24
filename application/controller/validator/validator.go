@@ -3,7 +3,7 @@ package validator
 import (
 	"context"
 	"errors"
-	"github.com/go-semantic-engine-v2/application/domain/external"
+	"github.com/go-search-engine-v2/application/domain/external"
 )
 
 // Schema struct defines a validation schema for product requests.

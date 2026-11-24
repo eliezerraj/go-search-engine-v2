@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 	"github.com/eliezerraj/go-core/v3/database/connector"
 	"github.com/eliezerraj/go-core/v3/logger"
-	"github.com/go-semantic-engine-v2/application/domain/entity"
-	tracing "github.com/go-semantic-engine-v2/application/infrastructure/observability"
+	"github.com/go-search-engine-v2/application/domain/entity"
+	tracing "github.com/go-search-engine-v2/application/infrastructure/observability"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -56,7 +56,7 @@ func (r *OutboxRepository) ProcessOutbox(ctx context.Context, tx pgx.Tx, outBoxE
 	ctx, span := tracing.CustomStartSpanCtx(ctx, "outboxRepository.ProcessOutbox", trace.SpanKindInternal)
 	defer span.End()
 
-	meter := otel.Meter("go-semantic-engine-v2.repository")
+	meter := otel.Meter("go-search-engine-v2.repository")
 	counter, _ := meter.Int64Counter("db_outbox_consume_requests_total")
 	histogram, _ := meter.Float64Histogram("db_outbox_consume_duration_seconds")
 	start := time.Now()
