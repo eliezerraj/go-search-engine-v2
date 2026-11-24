@@ -137,11 +137,12 @@ func NewApplication(cfg *config.Config) (*Application, error) {
 	// Repository initialization for the outbox module.
 	outboxRepository := repository.NewOutboxRepository(dbConnectorPrimary)
 	openSearchRepository := repository.NewOpenSearchRepository(cfg.OpenSearch)
+	capabilityCatalogRepository := repository.NewCapabilityCatalogRepository(dbConnectorPrimary)
 
 	// UseCase initialization	
 	semanticUsecase := usecase.NewSemanticUseCase(semanticRepository, modelModule)
 	outboxUsecase := usecase.NewOutboxUseCase(outboxRepository, openSearchRepository)
-	openSearchUsecase := usecase.NewOpenSearchUseCase(openSearchRepository)
+	openSearchUsecase := usecase.NewOpenSearchUseCase(openSearchRepository, capabilityCatalogRepository)
 
 	// Controller initialization
 	semanticController := controller.NewSemanticController(semanticUsecase, outboxUsecase, openSearchUsecase)

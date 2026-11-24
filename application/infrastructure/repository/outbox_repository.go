@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+	"github.com/jackc/pgx/v5"
 
 	"go.uber.org/zap"
 	"github.com/eliezerraj/go-core/v3/database/connector"
@@ -23,9 +24,10 @@ type OutboxRepository struct{
 }
 
 type IOutboxRepository interface {
-	ProcessOutbox(ctx context.Context, outBoxEvent entity.OutboxEvent) ([]entity.OutboxEvent, error)
-	MarkEventPublished(ctx context.Context, id int64) error
-	MarkEventFailed(ctx context.Context, id int64, lastError string) error
+	ProcessOutbox(ctx context.Context, tx pgx.Tx, outBoxEvent entity.OutboxEvent) ([]entity.OutboxEvent, error)
+	MarkEventPublished(ctx context.Context, tx pgx.Tx, outBoxEvent entity.OutboxEvent) error
+	MarkEventFailed(ctx context.Context, tx pgx.Tx, outBoxEvent entity.OutboxEvent, lastError string) error
+	BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)
 }
 
 func NewOutboxRepository(dbConnector connector.IDatabaseConnector) IOutboxRepository {
@@ -36,8 +38,20 @@ func NewOutboxRepository(dbConnector connector.IDatabaseConnector) IOutboxReposi
 	}
 }
 
-func (r *OutboxRepository) ProcessOutbox(ctx context.Context, outBoxEvent entity.OutboxEvent) (events []entity.OutboxEvent, err error) {
-	logger.Info(ctx, "outbox repository ProcessOutbox called", zap.String("event_type", outBoxEvent.EventType))
+func (r *OutboxRepository) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
+	logger.Info(ctx, "outbox repository BeginTx called")
+
+	tx, err := r.dbConnector.Writer().BeginTx(ctx, opts)
+	if err != nil {
+		logger.Debug(ctx, "outbox repository BeginTx failed", zap.Error(err))
+		return nil, err
+	}
+
+	return tx, nil
+}
+
+func (r *OutboxRepository) ProcessOutbox(ctx context.Context, tx pgx.Tx, outBoxEvent entity.OutboxEvent) (events []entity.OutboxEvent, err error) {
+	logger.Info(ctx, "outbox repository ProcessOutbox called", zap.String("aggregate_type", outBoxEvent.AggregateType))
 
 	ctx, span := tracing.CustomStartSpanCtx(ctx, "outboxRepository.ProcessOutbox", trace.SpanKindInternal)
 	defer span.End()
@@ -60,10 +74,10 @@ func (r *OutboxRepository) ProcessOutbox(ctx context.Context, outBoxEvent entity
 
 	query := `select id, aggregate_type, aggregate_id, event_type, payload, created_at, published_at, attempts, last_error
 			  from outbox_event
-			  where event_type = $1
+			  where aggregate_type = $1
 			  order by id asc`
 
-	rows, err := r.dbConnector.Reader().Query(ctx, query, outBoxEvent.EventType)
+	rows, err := r.dbConnector.Reader().Query(ctx, query, outBoxEvent.AggregateType)
 	if err != nil {
 		return nil, err
 	}
@@ -96,8 +110,11 @@ func (r *OutboxRepository) ProcessOutbox(ctx context.Context, outBoxEvent entity
 	return events, nil
 }
 
-func (r *OutboxRepository) MarkEventPublished(ctx context.Context, id int64) error {
-	logger.Info(ctx, "outbox repository MarkEventPublished called", zap.Int64("outbox_event_id", id))
+func (r *OutboxRepository) MarkEventPublished(ctx context.Context, tx pgx.Tx, outBoxEvent entity.OutboxEvent) error {
+	logger.Info(ctx, "outbox repository MarkEventPublished called", zap.Int64("outbox_event_id", outBoxEvent.ID))
+
+	ctx, span := tracing.CustomStartSpanCtx(ctx, "outboxRepository.MarkEventPublished", trace.SpanKindInternal)
+	defer span.End()
 
 	query := `update outbox_event
 			  set published_at = now(),
@@ -105,18 +122,21 @@ func (r *OutboxRepository) MarkEventPublished(ctx context.Context, id int64) err
 			      last_error = null
 			  where id = $1`
 
-	_, err := r.dbConnector.Writer().Exec(ctx, query, id)
+	_, err := r.dbConnector.Writer().Exec(ctx, query, outBoxEvent.ID)
 	return err
 }
 
-func (r *OutboxRepository) MarkEventFailed(ctx context.Context, id int64, lastError string) error {
-	logger.Info(ctx, "outbox repository MarkEventFailed called", zap.Int64("outbox_event_id", id))
+func (r *OutboxRepository) MarkEventFailed(ctx context.Context, tx pgx.Tx, outBoxEvent entity.OutboxEvent, lastError string) error {
+	logger.Info(ctx, "outbox repository MarkEventFailed called", zap.Int64("outbox_event_id", outBoxEvent.ID))
+
+	ctx, span := tracing.CustomStartSpanCtx(ctx, "outboxRepository.MarkEventFailed", trace.SpanKindInternal)
+	defer span.End()
 
 	query := `update outbox_event
 			  set attempts = attempts + 1,
 			      last_error = $2
 			  where id = $1`
 
-	_, err := r.dbConnector.Writer().Exec(ctx, query, id, lastError)
+	_, err := r.dbConnector.Writer().Exec(ctx, query, outBoxEvent.ID, lastError)
 	return err
 }

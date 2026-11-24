@@ -21,6 +21,7 @@ type IntentDecomposeResponse struct {
 }
 
 type OutboxEventRequest struct {
+	AggregateType string          `json:"aggregate_type" validate:"required"`
 	EventType     string          `json:"event_type"`
 }
 

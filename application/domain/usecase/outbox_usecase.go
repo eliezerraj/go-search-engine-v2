@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 
 	"go.uber.org/zap"
 
@@ -33,14 +34,48 @@ func NewOutboxUseCase(outboxRepository repository.IOutboxRepository,openSearchRe
 	}
 }
 
+// BeginTx starts a new database transaction with the specified options.
+func (u	*OutboxUseCase) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
+	logger.Info(ctx, "outbox usecase BeginTx called")
+
+	tx, err := u.outboxRepository.BeginTx(ctx, opts)
+	if err != nil {
+		logger.Error(ctx, "outbox usecase BeginTx failed", zap.Error(err))
+		return nil, err
+	}
+
+	return tx, nil
+}
+
 func (u *OutboxUseCase) ProcessOutbox(ctx context.Context, outBoxEvent entity.OutboxEvent) (events []entity.OutboxEvent, err error) {
-	logger.Info(ctx, "outbox usecase ProcessOutbox called", zap.String("event_type", outBoxEvent.EventType))
+	logger.Info(ctx, "outbox usecase ProcessOutbox called", zap.String("aggregate_type", outBoxEvent.AggregateType))
 
 	ctx, span := tracing.CustomStartSpanCtx(ctx, "outboxUsecase.ProcessOutbox", trace.SpanKindInternal)
 	defer span.End()
 
-	events, err = u.outboxRepository.ProcessOutbox(ctx, entity.OutboxEvent{
-		EventType: outBoxEvent.EventType,
+	// Start a new transaction
+	tx, err := u.outboxRepository.BeginTx(ctx, pgx.TxOptions{ IsoLevel: pgx.ReadCommitted, AccessMode: pgx.ReadWrite })
+	if err != nil {
+		logger.Error(ctx, "outbox usecase ProcessOutbox failed to begin transaction", zap.Error(err))
+		return nil, err
+	}
+
+	// Ensure that the transaction is either committed or rolled back
+	defer func() {
+		if err != nil {
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && rollbackErr != pgx.ErrTxClosed {
+				logger.Error(ctx, "outbox usecase ProcessOutbox failed to rollback transaction", zap.Error(rollbackErr))
+			}
+		} else {
+			if commitErr := tx.Commit(ctx); commitErr != nil {
+				logger.Error(ctx, "outbox usecase ProcessOutbox failed to commit transaction", zap.Error(commitErr))
+				err = commitErr
+			}
+		}
+	}()
+
+	events, err = u.outboxRepository.ProcessOutbox(ctx, tx, entity.OutboxEvent{
+		AggregateType: outBoxEvent.AggregateType,
 	})
 	if err != nil {
 		return nil, err
@@ -48,14 +83,14 @@ func (u *OutboxUseCase) ProcessOutbox(ctx context.Context, outBoxEvent entity.Ou
 
 	for _, event := range events {
 		if err = u.openSearchRepository.PostOutboxEvent(ctx, event); err != nil {
-			markErr := u.outboxRepository.MarkEventFailed(ctx, event.ID, err.Error())
+			markErr := u.outboxRepository.MarkEventFailed(ctx, tx, event, err.Error())
 			if markErr != nil {
 				return nil, fmt.Errorf("post opensearch error: %v; mark event failed error: %w", err, markErr)
 			}
 			return nil, err
 		}
 
-		if err = u.outboxRepository.MarkEventPublished(ctx, event.ID); err != nil {
+		if err = u.outboxRepository.MarkEventPublished(ctx, tx, event); err != nil {
 			return nil, err
 		}
 	}

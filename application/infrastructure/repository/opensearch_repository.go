@@ -22,6 +22,13 @@ import (
 
 const outboxEventIndexName = "outbox_event"
 
+type capabilityCandidate struct {
+	CapabilityID string
+	Type         string
+	Name         string
+	ServerID     string
+}
+
 type OpenSearchRepository struct {
 	endpoint string
 	username string
@@ -214,15 +221,15 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 		return nil, fmt.Errorf("opensearch search failed: status=%d", resp.StatusCode)
 	}
 
-	//fmt.Println("----------------------------- OpenSearch Search Request -----------------------------")
-	//fmt.Println("Status Code:", resp.StatusCode)
-	//fmt.Println("--------------------------------------------------------------------------------")
-	//fmt.Println("Response Body:")
-	//bodyBytes, _ := io.ReadAll(resp.Body)
-	//fmt.Println(string(bodyBytes))
-	//fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Println("----------------------------- OpenSearch Search Response -----------------------------")
+	fmt.Println("Status Code:", resp.StatusCode)
+	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Println("Response Body:")
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	fmt.Println(string(bodyBytes))
+	fmt.Println("--------------------------------------------------------------------------------")
 	// Reset the response body for further reading
-	//resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	type hit struct {
 		Score  float64        `json:"_score"`
@@ -280,6 +287,7 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 				CapabilityID: candidate.CapabilityID,
 				Type:         strings.ToUpper(candidate.Type),
 				Name:         candidate.Name,
+				ServerID:     candidate.ServerID,
 				Score:        h.Score,
 			})
 
@@ -296,12 +304,6 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 	return results, nil
 }
 
-type capabilityCandidate struct {
-	CapabilityID string
-	Type         string
-	Name         string
-	ServerID     string
-}
 
 func extractCapabilities(source map[string]any) []capabilityCandidate {
 	result := make([]capabilityCandidate, 0, 8)

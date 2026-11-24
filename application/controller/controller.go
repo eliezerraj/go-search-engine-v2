@@ -82,14 +82,14 @@ func (p *SemanticController) IntentDecompose(ctx context.Context, req external.I
 }
 
 func (p *SemanticController) ProcessOutbox(ctx context.Context, req external.OutboxEventRequest) ([]entity.OutboxEvent, error) {
-	logger.Info(ctx, "semantic controller ProcessOutbox called")
+	logger.Info(ctx, "semantic controller ProcessOutbox called", zap.String("aggregate_type", req.AggregateType))
 
 	// Tracing and metrics
 	ctx, span := tracing.CustomStartSpanCtx(ctx, "semanticController.processOutbox", trace.SpanKindInternal)
 	defer span.End()
 
 	res, err := p.OutboxUseCase.ProcessOutbox(ctx, entity.OutboxEvent{
-		EventType: req.EventType,
+		AggregateType: req.AggregateType,
 	})
 	if err != nil {
 		logger.Debug(ctx, "error executing ProcessOutbox controller", zap.Error(err))

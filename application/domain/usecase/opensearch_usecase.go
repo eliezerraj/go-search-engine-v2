@@ -15,17 +15,22 @@ import (
 
 type OpenSearchUseCase struct {
 	openSearchRepository repository.IOpenSearchRepository
+	capabilityCatalogRepository repository.ICapabilityCatalogRepository
 }
 
 type IOpenSearchUseCase interface {
 	OpenSearchSearch(ctx context.Context, query entity.Bm25SearchQuery) ([]entity.Bm25SearchResult, error)
 }
 
-func NewOpenSearchUseCase(openSearchRepository repository.IOpenSearchRepository) IOpenSearchUseCase {
+func NewOpenSearchUseCase(
+	openSearchRepository repository.IOpenSearchRepository,
+	capabilityCatalogRepository repository.ICapabilityCatalogRepository,
+) IOpenSearchUseCase {
 	logger.InfoOutCtx("initializing opensearch usecase SUCCESSFULLY")
 
 	return &OpenSearchUseCase{
 		openSearchRepository: openSearchRepository,
+		capabilityCatalogRepository: capabilityCatalogRepository,
 	}
 }
 
@@ -35,5 +40,30 @@ func (u *OpenSearchUseCase) OpenSearchSearch(ctx context.Context, query entity.B
 	ctx, span := tracing.CustomStartSpanCtx(ctx, "openSearchUsecase.OpenSearchSearch", trace.SpanKindInternal)
 	defer span.End()
 
-	return u.openSearchRepository.OpenSearchSearch(ctx, query)
+	results, err := u.openSearchRepository.OpenSearchSearch(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range results {
+		if results[i].ServerID == "" || results[i].Type == "" || results[i].CapabilityID == "" {
+			continue
+		}
+
+		invocation, err := u.capabilityCatalogRepository.LoadInvocationSchema(
+			ctx,
+			entity.CapabilityInvocationKey{
+				ServerID:       results[i].ServerID,
+				CapabilityType: results[i].Type,
+				Identifier:     results[i].CapabilityID,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		results[i].Invocation = invocation
+	}
+
+	return results, nil
 }

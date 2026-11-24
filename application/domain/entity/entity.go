@@ -45,14 +45,22 @@ type OutboxEvent struct {
 
 type Bm25SearchQuery struct {
 	Query           string   `json:"query" validate:"required"`
-	CapabilityTypes []string `json:"capabilityTypes,omitempty"`
-	ServerIds       []string `json:"serverIds,omitempty"`
+	CapabilityTypes []string `json:"capability_types,omitempty"`
+	ServerIds       []string `json:"server_ids,omitempty"`
 	Limit           int      `json:"limit,omitempty"`
 }
 
 type Bm25SearchResult struct {
-	CapabilityID string  `json:"capabilityId"`
+	CapabilityID string  `json:"capability_id"`
 	Type         string  `json:"type"`
 	Name         string  `json:"name"`
+	ServerID     string  `json:"server_id"`
 	Score        float64 `json:"score"`
+	Invocation   json.RawMessage `json:"invocation,omitempty"`
+}
+
+type CapabilityInvocationKey struct {
+	ServerID       string
+	CapabilityType string
+	Identifier     string
 }

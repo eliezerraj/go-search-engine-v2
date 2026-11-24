@@ -134,7 +134,7 @@ func (s *FiberServer) SetupRoutes(cfg *config.Config, application *application.A
 	appRoutes.Get("/echo-header", adapters.metadataAdp.HeadersGet)
 	appRoutes.Get("/echo-context", adapters.metadataAdp.ContextGet)
 
-	appRoutes.Post("/search/vector", middleware.MetricsMiddleware(adapters.applicationAdp.SearchVector))
+	appRoutes.Post("/vector/search", middleware.MetricsMiddleware(adapters.applicationAdp.SearchVector))
 
 	appRoutes.Post("/intent/decompose", 
 					authService.FiberAuthorizationMiddleware(),
