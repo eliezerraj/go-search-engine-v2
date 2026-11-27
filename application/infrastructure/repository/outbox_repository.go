@@ -75,9 +75,10 @@ func (r *OutboxRepository) ProcessOutbox(ctx context.Context, tx pgx.Tx, outBoxE
 	query := `select id, aggregate_type, aggregate_id, event_type, payload, created_at, published_at, attempts, last_error
 			  from outbox_event
 			  where aggregate_type = $1
+			    and published_at is null
 			  order by id asc`
 
-	rows, err := r.dbConnector.Reader().Query(ctx, query, outBoxEvent.AggregateType)
+	rows, err := tx.Query(ctx, query, outBoxEvent.AggregateType)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +123,7 @@ func (r *OutboxRepository) MarkEventPublished(ctx context.Context, tx pgx.Tx, ou
 			      last_error = null
 			  where id = $1`
 
-	_, err := r.dbConnector.Writer().Exec(ctx, query, outBoxEvent.ID)
+	_, err := tx.Exec(ctx, query, outBoxEvent.ID)
 	return err
 }
 
@@ -137,6 +138,6 @@ func (r *OutboxRepository) MarkEventFailed(ctx context.Context, tx pgx.Tx, outBo
 			      last_error = $2
 			  where id = $1`
 
-	_, err := r.dbConnector.Writer().Exec(ctx, query, outBoxEvent.ID, lastError)
+	_, err := tx.Exec(ctx, query, outBoxEvent.ID, lastError)
 	return err
 }

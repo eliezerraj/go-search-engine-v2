@@ -216,3 +216,7 @@ OpenSearch BM25 when multiple servers and larger catalogs are onboarded
 
 Phase 3:
 OpenSearch hybrid BM25 + TEI embeddings when real search telemetry shows semantic misses
+
+Outbox event routing:
+- `event_type=lexical` is indexed into `outbox_lexical` and used by BM25 search.
+- `event_type=embedding` is indexed into `outbox_embedding` for vector search workflows.

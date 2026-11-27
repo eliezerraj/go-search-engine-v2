@@ -21,13 +21,26 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const outboxEventIndexName = "outbox_event"
+const (
+	outboxEventIndexName     = "outbox_event"
+	outboxLexicalIndexName   = "outbox_lexical"
+	outboxEmbeddingIndexName = "outbox_embedding"
+)
 
 type capabilityCandidate struct {
 	CapabilityID string
 	Type         string
 	Name         string
 	ServerID     string
+}
+	
+type hit struct {
+		Score  float64        `json:"_score"`
+		Source map[string]any `json:"_source"`
+}
+
+type searchResponse struct {
+	Hits struct {Hits []hit `json:"hits"`} `json:"hits"`
 }
 
 type OpenSearchRepository struct {
@@ -39,6 +52,8 @@ type OpenSearchRepository struct {
 
 type IOpenSearchRepository interface {
 	PostOutboxEvent(ctx context.Context, event entity.OutboxEvent) error
+	PostOutboxLexicalEvent(ctx context.Context, event entity.OutboxEvent) error
+	PostOutboxEmbeddingEvent(ctx context.Context, event entity.OutboxEvent) error
 	GetOutboxEvent(ctx context.Context, id int64) (map[string]any, error)
 	OpenSearchSearch(ctx context.Context, query entity.Bm25SearchQuery) ([]entity.Bm25SearchResult, error)
 }
@@ -59,6 +74,30 @@ func (r *OpenSearchRepository) PostOutboxEvent(ctx context.Context, event entity
 
 	ctx, span := observability.CustomStartSpanCtx(ctx, "openSearchRepository.PostOutboxEvent", trace.SpanKindInternal)
 	defer span.End()
+
+	return r.postOutboxEventByIndex(ctx, event, outboxEventIndexName)
+}
+
+func (r *OpenSearchRepository) PostOutboxLexicalEvent(ctx context.Context, event entity.OutboxEvent) error {
+	logger.Info(ctx, "opensearch repository PostOutboxLexicalEvent called", zap.Any("outbox_event_id", event.ID))
+
+	ctx, span := observability.CustomStartSpanCtx(ctx, "openSearchRepository.PostOutboxLexicalEvent", trace.SpanKindInternal)
+	defer span.End()
+
+	return r.postOutboxEventByIndex(ctx, event, outboxLexicalIndexName)
+}
+
+func (r *OpenSearchRepository) PostOutboxEmbeddingEvent(ctx context.Context, event entity.OutboxEvent) error {
+	logger.Info(ctx, "opensearch repository PostOutboxEmbeddingEvent called", zap.Any("outbox_event_id", event.ID))
+
+	ctx, span := observability.CustomStartSpanCtx(ctx, "openSearchRepository.PostOutboxEmbeddingEvent", trace.SpanKindInternal)
+	defer span.End()
+
+	return r.postOutboxEventByIndex(ctx, event, outboxEmbeddingIndexName)
+}
+
+func (r *OpenSearchRepository) postOutboxEventByIndex(ctx context.Context, event entity.OutboxEvent, indexName string) error {
+	logger.Info(ctx, "opensearch repository postOutboxEventByIndex called", zap.Any("outbox_event_id", event.ID), zap.String("index_name", indexName))
 
 	var payload any
 	if len(event.Payload) > 0 {
@@ -88,7 +127,7 @@ func (r *OpenSearchRepository) PostOutboxEvent(ctx context.Context, event entity
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		fmt.Sprintf("%s/%s/_doc/%d", r.endpoint, outboxEventIndexName, event.ID),
+		fmt.Sprintf("%s/%s/_doc/%d", r.endpoint, indexName, event.ID),
 		bytes.NewReader(requestBody),
 	)
 	if err != nil {
@@ -106,7 +145,7 @@ func (r *OpenSearchRepository) PostOutboxEvent(ctx context.Context, event entity
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("opensearch post outbox event failed: status=%d body=%s", resp.StatusCode, string(bodyBytes))
+		return fmt.Errorf("opensearch post outbox event failed: index=%s status=%d body=%s", indexName, resp.StatusCode, string(bodyBytes))
 	}
 
 	return nil
@@ -160,26 +199,114 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 		limit = 5
 	}
 
-	// Use fuzziness and avoid requiring every term to match exactly
-	//  - "fuzziness": "AUTO" allows for minor typos
-	//  - "minimum_should_match": "70%" ensures that not all terms need to match exactly
+	// Blend strict matching with phrase boosting to improve ranking quality.
+	// A focused primary clause improves precision and a phrase clause promotes exact intent.
 	body := map[string]any{
-		"size": limit * 5,
+		"size": limit,
 		"query": map[string]any{
-			"multi_match": map[string]any{
-				"query":  query.Query,
-				"fields": []string{
-					"payload.documents.source.search_text^4",
-					"payload.documents.source.description^3",
-					"payload.documents.source.name^2",
-					"payload.documents.source.identifier^2",
-					"payload.documents.source.input_fields",
+			"bool": map[string]any{
+				"filter": []map[string]any{
+					{
+						"bool": map[string]any{
+							"should": []map[string]any{
+								{
+									"term": map[string]any{
+										"payload.source.enabled": true,
+									},
+								},
+								{
+									"term": map[string]any{
+										"payload.documents.source.enabled": true,
+									},
+								},
+							},
+							"minimum_should_match": 1,
+						},
+					},
 				},
-				"type": "best_fields",
-				"operator": "or",
-				"minimum_should_match": "70%",
-				"fuzziness": "AUTO",
-				"prefix_length": 1,
+				"should": []map[string]any{
+					// Main natural-language retrieval.
+					{
+						"multi_match": map[string]any{
+							"query": query.Query,
+							"fields": []string{
+								"payload.source.description^4",
+								"payload.source.search_text^2",
+								"payload.source.input_tokens^1.5",
+								"payload.documents.source.description^4",
+								"payload.documents.source.search_text^2",
+								"payload.documents.source.input_tokens^1.5",
+							},
+							"type":     "cross_fields",
+							"operator": "and",
+						},
+					},
+					// Exact or near-exact capability-name matching.
+					{
+						"multi_match": map[string]any{
+							"query": query.Query,
+							"fields": []string{
+								"payload.source.name^8",
+								"payload.source.identifier^8",
+								"payload.documents.source.name^8",
+								"payload.documents.source.identifier^8",
+							},
+							"type":     "best_fields",
+							"operator": "or",
+						},
+					},
+					// Strong phrase signal from the business description.
+					{
+						"match_phrase": map[string]any{
+							"payload.source.description": map[string]any{
+								"query": query.Query,
+								"boost": 6,
+								"slop":  1,
+							},
+						},
+					},
+					{
+						"match_phrase": map[string]any{
+							"payload.documents.source.description": map[string]any{
+								"query": query.Query,
+								"boost": 6,
+								"slop":  1,
+							},
+						},
+					},
+					// Lower-weight phrase signal from the combined search text.
+					{
+						"match_phrase": map[string]any{
+							"payload.source.search_text": map[string]any{
+								"query": query.Query,
+								"boost": 3,
+								"slop":  2,
+							},
+						},
+					},
+					{
+						"match_phrase": map[string]any{
+							"payload.documents.source.search_text": map[string]any{
+								"query": query.Query,
+								"boost": 3,
+								"slop":  2,
+							},
+						},
+					},
+				},
+				"minimum_should_match": 1,
+			},
+		},
+		"sort": []map[string]any{
+			{
+				"_score": map[string]any{
+					"order": "desc",
+				},
+			},
+			{
+				"created_at": map[string]any{
+					"order": "desc",
+				},
 			},
 		},
 	}
@@ -193,7 +320,7 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		fmt.Sprintf("%s/%s/_search", r.endpoint, outboxEventIndexName),
+		fmt.Sprintf("%s/%s/_search", r.endpoint, outboxLexicalIndexName),
 		bytes.NewReader(requestBody),
 	)
 	if err != nil {
@@ -206,7 +333,7 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 
 	fmt.Println("----------------------------- OpenSearch Search Request -----------------------------")
 	fmt.Println("Headers:", req.Header)
-	fmt.Println("URL:", fmt.Sprintf("%s/%s/_search", r.endpoint, outboxEventIndexName))
+	fmt.Println("URL:", fmt.Sprintf("%s/%s/_search", r.endpoint, outboxLexicalIndexName))
 	fmt.Println("Body:", string(requestBody))
 	fmt.Println("--------------------------------------------------------------------------------")
 
@@ -234,16 +361,6 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 	fmt.Println("--------------------------------------------------------------------------------")
 	// Reset the response body for further reading
 	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	type hit struct {
-		Score  float64        `json:"_score"`
-		Source map[string]any `json:"_source"`
-	}
-	type searchResponse struct {
-		Hits struct {
-			Hits []hit `json:"hits"`
-		} `json:"hits"`
-	}
 
 	parsed := searchResponse{}
 	if err = json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
@@ -308,7 +425,6 @@ func (r *OpenSearchRepository) OpenSearchSearch(ctx context.Context, query entit
 	return results, nil
 }
 
-
 func extractCapabilities(source map[string]any) []capabilityCandidate {
 	result := make([]capabilityCandidate, 0, 8)
 
@@ -334,6 +450,10 @@ func extractCapabilities(source map[string]any) []capabilityCandidate {
 	payload, ok := source["payload"].(map[string]any)
 	if ok {
 		appendCandidate(payload)
+
+		if sourceRaw, hasSource := payload["source"].(map[string]any); hasSource {
+			appendCandidate(sourceRaw)
+		}
 
 		documents, hasDocuments := payload["documents"].([]any)
 		if hasDocuments {

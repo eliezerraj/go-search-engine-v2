@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"strings"
 	"github.com/jackc/pgx/v5"
 
 	"go.uber.org/zap"
@@ -20,6 +21,11 @@ type OutboxUseCase struct {
     outboxRepository 		repository.IOutboxRepository
 	openSearchRepository 	repository.IOpenSearchRepository
 }
+
+const (
+	outboxEventTypeLexical   = "lexical"
+	outboxEventTypeEmbedding = "embedding"
+)
 
 type IOutboxUseCase interface {
 	ProcessOutbox(ctx context.Context, outBoxEvent entity.OutboxEvent) (events []entity.OutboxEvent, err error)
@@ -82,7 +88,7 @@ func (u *OutboxUseCase) ProcessOutbox(ctx context.Context, outBoxEvent entity.Ou
 	}
 
 	for _, event := range events {
-		if err = u.openSearchRepository.PostOutboxEvent(ctx, event); err != nil {
+		if err = u.processEventByType(ctx, event); err != nil {
 			markErr := u.outboxRepository.MarkEventFailed(ctx, tx, event, err.Error())
 			if markErr != nil {
 				return nil, fmt.Errorf("post opensearch error: %v; mark event failed error: %w", err, markErr)
@@ -96,4 +102,23 @@ func (u *OutboxUseCase) ProcessOutbox(ctx context.Context, outBoxEvent entity.Ou
 	}
 
 	return events, nil
+}
+
+func (u *OutboxUseCase) processEventByType(ctx context.Context, event entity.OutboxEvent) error {
+	switch strings.ToLower(strings.TrimSpace(event.EventType)) {
+	case outboxEventTypeLexical:
+		return u.processLexicalEvent(ctx, event)
+	case outboxEventTypeEmbedding:
+		return u.processEmbeddingEvent(ctx, event)
+	default:
+		return fmt.Errorf("unsupported outbox event_type: %s", event.EventType)
+	}
+}
+
+func (u *OutboxUseCase) processLexicalEvent(ctx context.Context, event entity.OutboxEvent) error {
+	return u.openSearchRepository.PostOutboxLexicalEvent(ctx, event)
+}
+
+func (u *OutboxUseCase) processEmbeddingEvent(ctx context.Context, event entity.OutboxEvent) error {
+	return u.openSearchRepository.PostOutboxEmbeddingEvent(ctx, event)
 }
